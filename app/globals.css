@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: #f7f9fc;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle, calm scrollbars to keep the clinical feel. */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+  border: 2px solid #f7f9fc;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@layer components {
+  .card {
+    @apply bg-white border border-hairline rounded-2xl shadow-card;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-brand-600 text-white hover:bg-brand-700 shadow-sm;
+  }
+  .btn-ghost {
+    @apply btn bg-white text-ink border border-hairline hover:bg-slate-50;
+  }
+  .btn-subtle {
+    @apply btn bg-slate-100 text-ink hover:bg-slate-200;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-hairline bg-white px-3 py-1 text-xs font-medium text-muted hover:bg-slate-50 transition;
+  }
+  .label {
+    @apply text-[11px] font-semibold uppercase tracking-wide text-muted;
+  }
+  .input {
+    @apply w-full rounded-xl border border-hairline bg-white px-4 py-3 text-sm outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-100 transition;
+  }
+}
+
+/* Gentle entrance animation for chat bubbles / cards. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-rise {
+  animation: rise 0.28s ease-out both;
+}
+
+/* Pulsing dot for the "thinking" indicator. */
+@keyframes pulse-dot {
+  0%, 80%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+.dot {
+  animation: pulse-dot 1.2s infinite ease-in-out;
+}
