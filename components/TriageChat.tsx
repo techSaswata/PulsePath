@@ -23,6 +23,8 @@ import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { SpeakButton } from "@/components/SpeakButton";
 import { Timeline } from "@/components/Timeline";
 import { AssessmentView } from "@/components/AssessmentView";
+import { TriageProgress } from "@/components/TriageProgress";
+import { SeveritySlider } from "@/components/SeveritySlider";
 
 const GREETING =
   "Hi, I'm your PulsePath triage assistant. I'll ask a few questions to understand your symptoms and point you to the right level of care. To start — what's the main problem that's troubling you today?";
@@ -117,15 +119,16 @@ export function TriageChat() {
       <div className="card flex h-[72vh] flex-col overflow-hidden">
         <div className="flex items-center justify-between border-b border-hairline px-5 py-3">
           <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-green-500" />
+            <span className={`h-2 w-2 rounded-full ${assessment ? "bg-brand-500" : "bg-green-500 animate-pulse"}`} />
             <span className="text-sm font-medium text-ink">
               {assessment ? "Assessment complete" : "Triage conversation"}
             </span>
           </div>
-          <button onClick={reset} className="text-xs font-medium text-muted hover:text-ink">
+          <button onClick={reset} className="text-xs font-medium text-muted hover:text-ink transition">
             Start over
           </button>
         </div>
+        {!assessment && <TriageProgress current={turnCount} />}
 
         <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
           {transcript.map((m, i) => (
@@ -180,6 +183,22 @@ export function TriageChat() {
 
         {!assessment && (
           <div className="border-t border-hairline p-3">
+            {/* Common symptom quick-chips */}
+            {turnCount === 0 && (
+              <div className="mb-2.5 flex flex-wrap gap-1.5 px-1">
+                <span className="text-[11px] text-muted self-center">Common:</span>
+                {["Chest pain", "Headache", "Fever", "Shortness of breath", "Nausea", "Stomach pain", "Dizziness", "Back pain"].map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setInput((cur) => cur ? cur + ", " + s.toLowerCase() : s)}
+                    className="chip text-[11px] hover:!bg-brand-50 hover:!text-brand-700 hover:!border-brand-200"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-end gap-2">
               <textarea
                 value={input}
@@ -190,25 +209,27 @@ export function TriageChat() {
                     send(input);
                   }
                 }}
-                rows={1}
-                placeholder="Describe your symptoms…"
+                rows={2}
+                placeholder="Describe your symptoms… (Enter to send, Shift+Enter for new line)"
                 disabled={thinking}
                 className="input max-h-32 flex-1 resize-none"
               />
-              <VoiceRecorder
-                disabled={thinking}
-                onTranscript={(text) => {
-                  setViaVoice(true);
-                  setInput((cur) => (cur ? cur + " " + text : text));
-                }}
-              />
-              <button onClick={() => send(input)} disabled={thinking || !input.trim()} className="btn-primary">
-                Send
-              </button>
+              <div className="flex flex-col gap-1.5">
+                <VoiceRecorder
+                  disabled={thinking}
+                  onTranscript={(text) => {
+                    setViaVoice(true);
+                    setInput((cur) => (cur ? cur + " " + text : text));
+                  }}
+                />
+                <button onClick={() => send(input)} disabled={thinking || !input.trim()} className="btn-primary">
+                  Send
+                </button>
+              </div>
             </div>
             <div className="mt-2 flex items-center justify-between px-1">
               <p className="text-[11px] text-muted">
-                {turnCount > 0 ? `${turnCount} question${turnCount === 1 ? "" : "s"} asked` : "Type or use voice"}
+                {input.length > 0 ? `${input.length} chars` : "Type, speak, or pick a symptom above"}
               </p>
               {profile.primaryComplaint && (
                 <button onClick={() => send("", true)} disabled={thinking} className="text-[11px] font-medium text-brand-600 hover:underline">
@@ -229,6 +250,10 @@ export function TriageChat() {
           </p>
           <BodyDiagram selected={profile.bodyRegions} onToggle={toggleRegion} />
         </div>
+
+        {!assessment && (
+          <SeveritySlider onAppend={(text) => setInput((cur) => cur ? cur + ". " + text : text)} />
+        )}
 
         <div className="card p-5">
           <h3 className="mb-3 text-sm font-semibold text-ink">Live symptom profile</h3>
