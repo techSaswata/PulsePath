@@ -21,7 +21,7 @@ import { extractProfile } from "@/lib/triage/intake";
 import { UrgencyTier } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 60; // Vercel Hobby cap
 
 export async function GET(req: NextRequest) {
   const expected = appEnv().cronSecret;

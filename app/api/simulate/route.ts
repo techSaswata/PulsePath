@@ -8,7 +8,7 @@ import { runFullSimulation, runGuardrailSimulation } from "@/lib/simulation/runn
 import { supabaseAdmin, supabaseConfigured } from "@/lib/db/supabase";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 60; // Vercel Hobby cap; use "guardrails" mode in prod (instant). Full mode: run locally for large N.
 
 export async function POST(req: NextRequest) {
   try {

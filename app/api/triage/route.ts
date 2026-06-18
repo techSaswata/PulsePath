@@ -27,7 +27,7 @@ import { indexCase } from "@/lib/rag/retrieve";
 import { scheduleFollowUps } from "@/lib/monitoring/followups";
 
 export const runtime = "nodejs";
-export const maxDuration = 120; // multi-agent debate can take a while
+export const maxDuration = 60; // multi-agent debate; 60 = Vercel Hobby cap (full triage ~32s)
 
 interface TriageRequest {
   sessionId?: string;
