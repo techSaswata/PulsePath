@@ -50,17 +50,76 @@ export async function retrieveGuidelines(
 }
 
 async function retrieveGuidelinesVector(query: string, topK: number): Promise<GuidelineCitation[]> {
+  return searchGuidelines(await embedQuery(query), topK);
+}
+
+/** Vector search over the guideline collection using a precomputed query embedding. */
+async function searchGuidelines(vector: number[], topK: number): Promise<GuidelineCitation[]> {
   const { guidelines } = collections();
-  const vector = await embedQuery(query);
-  const res = await qdrant().search(guidelines, {
-    vector,
-    limit: topK,
-    with_payload: true,
-  });
+  const res = await qdrant().search(guidelines, { vector, limit: topK, with_payload: true });
+  return res.map((p) => toCitation(p.payload as unknown as GuidelineDoc, p.score ?? 0));
+}
+
+/** Vector search over the case collection using a precomputed query embedding. */
+async function searchCases(vector: number[], topK: number): Promise<SimilarCase[]> {
+  const { cases } = collections();
+  const res = await qdrant().search(cases, { vector, limit: topK, with_payload: true });
   return res.map((p) => {
-    const payload = p.payload as unknown as GuidelineDoc;
-    return toCitation(payload, p.score ?? 0);
+    const payload = p.payload as unknown as CasePayload;
+    return {
+      id: payload.sourceId ?? String(p.id),
+      presentingComplaint: payload.presentingComplaint,
+      finalTier: payload.finalTier,
+      outcome: payload.outcome,
+      similarity: p.score ?? 0,
+    };
   });
+}
+
+export interface RetrievedContext {
+  citations: GuidelineCitation[];
+  similarCases: SimilarCase[];
+}
+
+/**
+ * Retrieve guideline citations + similar cases for one profile. Both use the
+ * SAME query, so we embed it ONCE and run the two Qdrant searches in parallel —
+ * instead of two separate embedding round-trips on the front of every
+ * assessment. Degrades to the keyword retriever for guidelines (and [] for
+ * cases) if vector search is unavailable or fails.
+ */
+export async function retrieveContext(
+  profile: SymptomProfile,
+  guidelinesK = 5,
+  casesK = 3
+): Promise<RetrievedContext> {
+  const query = profileToQuery(profile);
+  const status = integrationStatus();
+
+  if (!status.qdrant || !status.embeddings) {
+    return { citations: keywordRetrieve(query, guidelinesK), similarCases: [] };
+  }
+
+  let vector: number[];
+  try {
+    vector = await embedQuery(query); // single embedding, shared by both searches
+  } catch (err) {
+    console.warn("[rag] embedding failed, keyword fallback:", err);
+    return { citations: keywordRetrieve(query, guidelinesK), similarCases: [] };
+  }
+
+  const [citations, similarCases] = await Promise.all([
+    searchGuidelines(vector, guidelinesK).catch((err) => {
+      console.warn("[rag] guideline vector search failed, keyword fallback:", err);
+      return keywordRetrieve(query, guidelinesK);
+    }),
+    searchCases(vector, casesK).catch((err) => {
+      console.warn("[rag] similar-case search failed:", err);
+      return [] as SimilarCase[];
+    }),
+  ]);
+
+  return { citations, similarCases };
 }
 
 /** Deterministic TF-style keyword scorer over the seed corpus (no deps). */
@@ -136,23 +195,7 @@ export async function retrieveSimilarCases(
   const status = integrationStatus();
   if (!status.qdrant || !status.embeddings) return [];
   try {
-    const { cases } = collections();
-    const vector = await embedQuery(profileToQuery(profile));
-    const res = await qdrant().search(cases, {
-      vector,
-      limit: topK,
-      with_payload: true,
-    });
-    return res.map((p) => {
-      const payload = p.payload as unknown as CasePayload;
-      return {
-        id: payload.sourceId ?? String(p.id),
-        presentingComplaint: payload.presentingComplaint,
-        finalTier: payload.finalTier,
-        outcome: payload.outcome,
-        similarity: p.score ?? 0,
-      };
-    });
+    return await searchCases(await embedQuery(profileToQuery(profile)), topK);
   } catch (err) {
     console.warn("[rag] similar-case retrieval failed:", err);
     return [];
