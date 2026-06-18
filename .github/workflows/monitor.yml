@@ -1,0 +1,32 @@
+name: Continuous Monitoring (PulsePath)
+
+# BUILD 12 — drives scheduled follow-up re-checks by pinging the deployed
+# /api/monitor endpoint. Replaces the Vercel cron (Hobby plan allows only
+# daily crons); GitHub Actions gives hourly scheduling for free.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   MONITOR_URL  = https://<your-app>.vercel.app/api/monitor
+#   CRON_SECRET  = the same value as the CRON_SECRET env var in Vercel
+
+on:
+  schedule:
+    - cron: "0 * * * *" # hourly (GitHub may delay under load; that's fine)
+  workflow_dispatch: {} # allow manual "Run workflow" from the Actions tab
+
+jobs:
+  advance-followups:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger due follow-ups
+        run: |
+          if [ -z "${MONITOR_URL}" ] || [ -z "${CRON_SECRET}" ]; then
+            echo "::error::Set MONITOR_URL and CRON_SECRET repo secrets."
+            exit 1
+          fi
+          echo "Pinging $MONITOR_URL …"
+          curl -sS --fail-with-body \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${MONITOR_URL}"
+        env:
+          MONITOR_URL: ${{ secrets.MONITOR_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

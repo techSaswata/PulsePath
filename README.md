@@ -135,12 +135,20 @@ transparent urgency decision + clinician handoff report.
 
 ## ⏰ Continuous monitoring (Build 12)
 
-Non-emergency cases get follow-ups scheduled in Supabase; a [vercel.json](vercel.json) cron hits
-`/api/monitor` hourly. Set `CRON_SECRET` in your Vercel project env — Vercel sends it automatically.
+Non-emergency cases get follow-ups scheduled in Supabase. A **GitHub Actions** workflow
+([.github/workflows/monitor.yml](.github/workflows/monitor.yml)) pings `/api/monitor` hourly to
+advance them (Vercel's Hobby plan only allows daily crons, so we use Actions instead — free + hourly).
+
+Set two **repo** secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+|--------|-------|
+| `MONITOR_URL` | `https://<your-app>.vercel.app/api/monitor` |
+| `CRON_SECRET` | same value as the `CRON_SECRET` env var in Vercel |
 
 | Call | Auth | Use |
 |------|------|-----|
-| `GET /api/monitor` | `Authorization: Bearer $CRON_SECRET` (automatic) | Vercel cron — advances due follow-ups |
+| `GET /api/monitor` | `Authorization: Bearer $CRON_SECRET` | GitHub Action — advances due follow-ups |
 | `GET /api/monitor?secret=$CRON_SECRET` | query param | Manual / local |
 | `POST /api/monitor` | — | Patient follow-up reply → re-assess → **escalate** if more urgent |
 
