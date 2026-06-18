@@ -42,7 +42,12 @@ import {
   mostUrgent,
 } from "@/lib/types";
 
-const MAX_DEBATE_ROUNDS = 2;
+// Debate cap. The Safety Agent's adversarial pass ALWAYS runs; this only bounds
+// how many times Risk↔Safety loop back on disagreement. 1 = single pass, no
+// loop-back (safety still escalates and the Final Agent takes the most urgent
+// position, so recall is unaffected) — the cheapest latency setting. Raise it
+// to re-enable the iterative debate at the cost of extra serial LLM calls.
+const MAX_DEBATE_ROUNDS = 1;
 
 // ---------------------------------------------------------------------------
 // Graph state

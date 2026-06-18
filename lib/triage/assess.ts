@@ -22,17 +22,15 @@ import {
 } from "@/lib/types";
 import { runGuardrails } from "@/lib/guardrails/engine";
 import { runReasoning } from "@/lib/graph/reasoningGraph";
-import { retrieveGuidelines, retrieveSimilarCases } from "@/lib/rag/retrieve";
+import { retrieveContext } from "@/lib/rag/retrieve";
 import { renderProfileText } from "@/lib/triage/profileText";
 
 export async function assess(profile: SymptomProfile): Promise<TriageAssessment> {
   const profileText = renderProfileText(profile);
 
-  // 1. Evidence + similar cases (parallel, both degrade gracefully).
-  const [citations, similarCases] = await Promise.all([
-    retrieveGuidelines(profile, 5),
-    retrieveSimilarCases(profile, 3),
-  ]);
+  // 1. Evidence + similar cases. One shared embedding, both searches in
+  //    parallel; degrades gracefully (keyword guidelines / [] cases) on failure.
+  const { citations, similarCases } = await retrieveContext(profile, 5, 3);
 
   // 2. Multi-agent reasoning (Build 2).
   const reasoning = await runReasoning({ profile, profileText, citations, similarCases });

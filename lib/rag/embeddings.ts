@@ -1,6 +1,14 @@
 import { embedEnv } from "@/lib/config/env";
 
 /**
+ * Abort an embedding request that stalls (e.g. a HuggingFace serverless cold
+ * start). On timeout the fetch rejects, and callers in retrieve.ts fall back to
+ * the keyword retriever (guidelines) / [] (cases) instead of hanging the whole
+ * assessment. Override with EMBED_TIMEOUT_MS.
+ */
+const EMBED_TIMEOUT_MS = Number(process.env.EMBED_TIMEOUT_MS ?? "8000");
+
+/**
  * Embeddings via the OpenAI-compatible *semantics*, but powered by a FREE
  * HuggingFace model. Two transport modes:
  *
@@ -35,6 +43,7 @@ async function embedHfRouter(inputs: string[]): Promise<number[][]> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ inputs, normalize: true, truncate: true }),
+    signal: AbortSignal.timeout(EMBED_TIMEOUT_MS),
   });
   if (!res.ok) {
     const body = await res.text();
@@ -54,6 +63,7 @@ async function embedOpenAICompatible(inputs: string[]): Promise<number[][]> {
     method: "POST",
     headers,
     body: JSON.stringify({ input: inputs, model: env.model, encoding_format: "float" }),
+    signal: AbortSignal.timeout(EMBED_TIMEOUT_MS),
   });
   if (!res.ok) {
     const body = await res.text();
