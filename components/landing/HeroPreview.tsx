@@ -16,7 +16,7 @@ export function HeroPreview() {
             <p className="label">Example assessment</p>
             <p className="text-sm font-semibold text-ink">“Chest pain spreading to my left arm”</p>
           </div>
-          <ConfidenceRing value={96} size={72} />
+          <ConfidenceRing value={96} size={80} />
         </div>
 
         {/* Urgency ladder */}
