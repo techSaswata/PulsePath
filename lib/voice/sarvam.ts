@@ -22,11 +22,25 @@ export async function sarvamSTT(
   const env = sarvamEnv();
   const form = new FormData();
 
-  const blob =
-    audio instanceof Blob
-      ? audio
-      : new Blob([new Uint8Array(audio)], { type: opts?.mimeType ?? "audio/wav" });
-  form.append("file", blob, opts?.filename ?? "recording.wav");
+  // Sarvam matches the uploaded part's Content-Type against an allowlist by
+  // EXACT string. The browser's MediaRecorder tags WebM as
+  // "audio/webm;codecs=opus", and that parameterized value is rejected even
+  // though bare "audio/webm" is allowed. So strip any ";codecs=..." parameter
+  // and re-wrap the blob so the multipart part carries the clean type.
+  const rawType = (audio instanceof Blob ? audio.type : opts?.mimeType) || "audio/wav";
+  const cleanType = rawType.split(";")[0].trim() || "audio/wav";
+  const bytes =
+    audio instanceof Blob ? new Uint8Array(await audio.arrayBuffer()) : new Uint8Array(audio);
+  const blob = new Blob([bytes], { type: cleanType });
+
+  // Align the filename extension with the clean type (some servers sniff it).
+  const extByType: Record<string, string> = {
+    "audio/webm": "webm", "video/webm": "webm", "audio/wav": "wav", "audio/x-wav": "wav",
+    "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/mp4": "m4a", "audio/x-m4a": "m4a",
+    "audio/ogg": "ogg", "audio/opus": "opus", "audio/flac": "flac", "audio/aac": "aac",
+  };
+  const filename = opts?.filename ?? `recording.${extByType[cleanType] ?? "wav"}`;
+  form.append("file", blob, filename);
   form.append("model", env.sttModel);
   form.append("language_code", opts?.languageCode ?? "unknown");
   // `mode` is only valid for saaras:* models; harmless to include for transcribe.
