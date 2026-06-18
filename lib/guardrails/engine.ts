@@ -55,9 +55,60 @@ export function buildSignalBag(profile: SymptomProfile): SignalBag {
   };
 }
 
-/** Does the haystack contain ANY of the given phrases (substring match)? */
+// ---------------------------------------------------------------------------
+// Negation handling — a symptom that is explicitly DENIED ("no chest pain",
+// "denies stiff neck", "not short of breath") is a pertinent NEGATIVE and must
+// not trip a rule. We detect negation at MATCH time by inspecting the words
+// immediately BEFORE each occurrence, never the phrase itself.
+//
+// This is deliberate: many genuine red-flag phrases contain a negation word
+// *internally* — "can't breathe", "won't stop bleeding", "can't speak",
+// "no reason to live", "not passed urine". Scrubbing negations from the raw
+// text would wrongly delete those real emergencies. Looking only at what comes
+// *before* the matched phrase preserves them while still catching real denials.
+// ---------------------------------------------------------------------------
+
+/** Negation cues that, appearing just before a symptom, deny it. */
+const NEG_CUES = new Set([
+  "no", "not", "without", "never", "none", "negative",
+  "denies", "denied", "deny",
+  "don't", "doesn't", "didn't", "hadn't", "haven't", "hasn't",
+  "isn't", "wasn't", "aren't", "weren't", "ain't",
+]);
+
+/** Conjunctions that terminate a backwards negation scan (clause boundaries). */
+const NEG_STOP = new Set([
+  "but", "however", "although", "though", "yet", "except", "because", "so", "and", "or",
+]);
+
+/** Is the phrase occurrence at `idx` preceded by a negation cue within the same clause? */
+function isNegatedAt(text: string, idx: number): boolean {
+  const tokens = text.slice(0, idx).split(/\s+/).filter(Boolean);
+  let scanned = 0;
+  for (let i = tokens.length - 1; i >= 0 && scanned < 4; i--, scanned++) {
+    const raw = tokens[i];
+    // Sentence punctuation between the cue and the symptom ends the clause.
+    if (/[.,;:!?]/.test(raw)) return false;
+    if (NEG_STOP.has(raw)) return false;
+    if (NEG_CUES.has(raw)) return true;
+  }
+  return false;
+}
+
+/** Does the phrase appear at least once WITHOUT being negated? */
+function occursAffirmatively(text: string, phrase: string): boolean {
+  let from = 0;
+  for (;;) {
+    const idx = text.indexOf(phrase, from);
+    if (idx === -1) return false;
+    if (!isNegatedAt(text, idx)) return true;
+    from = idx + phrase.length;
+  }
+}
+
+/** Which of the given phrases appear affirmatively (negation-aware substring match)? */
 function any(text: string, phrases: string[]): string[] {
-  return phrases.filter((p) => text.includes(p));
+  return phrases.filter((p) => occursAffirmatively(text, p));
 }
 
 /** Does the haystack contain a phrase matching this regex? Returns matches. */
