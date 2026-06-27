@@ -18,6 +18,13 @@ export function supabaseAdmin(): SupabaseClient {
   }
   _admin = createClient(env.url, env.serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
+    global: {
+      // Next.js (App Router) patches the global `fetch` and caches GETs by
+      // default. supabase-js rides on that fetch, so reads can be served from a
+      // stale cache — returning 0 rows even though the service-role key would
+      // see them live. Force `no-store` so every DB read hits Postgres fresh.
+      fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+    },
   });
   return _admin;
 }
