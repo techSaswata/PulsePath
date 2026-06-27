@@ -15,6 +15,11 @@ export function makeLLM(opts?: { temperature?: number }): ChatOpenAI {
     apiKey: env.apiKey,
     temperature: opts?.temperature ?? env.temperature,
     maxTokens: env.maxTokens,
+    // Fail fast on rate limits. The default (6) retries a 429 with long
+    // exponential backoff (~100s+), which blows the serverless time budget and
+    // turns a quota error into a silent timeout. 2 surfaces it in seconds so the
+    // caller can report "quota exceeded" cleanly.
+    maxRetries: 2,
     // Many OpenAI-compatible endpoints don't emit streaming usage chunks.
     streamUsage: false,
     configuration: {

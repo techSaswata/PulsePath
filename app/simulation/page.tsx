@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { URGENCY_ORDER, URGENCY_META, UrgencyTier } from "@/lib/types";
 import { UrgencyBadge } from "@/components/UrgencyBadge";
+import { computeMetrics } from "@/lib/simulation/metrics";
 
 interface CaseResult {
   id: string;
@@ -40,24 +41,70 @@ export default function SimulationPage() {
   const [running, setRunning] = useState(false);
   const [run, setRun] = useState<SimRun | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  async function post(payload: Record<string, unknown>) {
+    const res = await fetch("/api/simulate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Simulation failed");
+    return data;
+  }
 
   async function start() {
     setRunning(true);
     setError(null);
     setRun(null);
+    setProgress(null);
     try {
-      const res = await fetch("/api/simulate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ n, mode, concurrency: 4 }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Simulation failed");
-      setRun(data as SimRun);
+      if (mode === "guardrails") {
+        // Deterministic + instant: whole run in one request.
+        const data = await post({ n, mode, concurrency: 4 });
+        setRun(data as SimRun);
+      } else {
+        // Full pipeline: process ONE batch per request so each call finishes
+        // under Vercel's 60s limit, then stitch the batches together here.
+        const total = Math.min(n, 200);
+        const batch = 1;
+        const acc: CaseResult[] = [];
+        let offset = 0;
+        setProgress({ done: 0, total });
+        while (offset < total) {
+          const data = (await post({ n: total, mode, seed: 42, offset, batch, concurrency: 1 })) as {
+            results: CaseResult[];
+            attempted: number;
+            done: boolean;
+            quotaExceeded: boolean;
+            timedOut: boolean;
+          };
+          acc.push(...data.results);
+          // Live-update so the confusion matrix fills in as cases complete.
+          setRun({ mode: "full", results: [...acc], metrics: computeMetrics(acc) });
+          setProgress({ done: acc.length, total });
+
+          if (data.quotaExceeded) {
+            setError(
+              `LLM daily quota reached after ${acc.length} case(s) — showing partial results. ` +
+                `Enable billing on the LLM key or switch to "Guardrails only" mode.`
+            );
+            break;
+          }
+          if (data.timedOut) {
+            setError(`A case exceeded the time budget after ${acc.length} case(s) — showing partial results.`);
+            break;
+          }
+          offset += data.attempted;
+          if (data.done) break;
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Simulation failed");
     } finally {
       setRunning(false);
+      setProgress(null);
     }
   }
 
@@ -103,10 +150,17 @@ export default function SimulationPage() {
           </div>
         </div>
         <button onClick={start} disabled={running} className="btn-primary">
-          {running ? "Running…" : "Run simulation"}
+          {running
+            ? progress
+              ? `Running… ${progress.done}/${progress.total}`
+              : "Running…"
+            : "Run simulation"}
         </button>
         {mode === "full" && (
-          <p className="text-xs text-muted">Full mode calls the LLM for every patient — capped at 200.</p>
+          <p className="text-xs text-muted">
+            Full mode runs the LLM pipeline one case at a time (~30s each) so it stays under Vercel&apos;s 60s limit.
+            Results fill in live. On a free-tier LLM key, expect only a few cases before the daily quota stops the run.
+          </p>
         )}
       </div>
 

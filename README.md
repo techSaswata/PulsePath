@@ -10,7 +10,7 @@ transparent urgency decision + clinician handoff report.
 | | |
 |---|---|
 | **Stack** | Next.js (App Router) · TypeScript · LangGraph.js · Supabase · Qdrant · Sarvam AI |
-| **LLM** | Any OpenAI-compatible provider (default: OpenRouter `qwen/qwen3.6-35b-a3b`) |
+| **LLM** | Any OpenAI-compatible provider (default: Google `gemini-2.5-flash` via its OpenAI-compatible endpoint) |
 | **Embeddings** | Free HuggingFace `BAAI/bge-base-en-v1.5` (768-dim) via OpenAI-compatible adapter |
 | **Config** | 100% env-driven — no hard-coded keys |
 | **Status** | Builds clean · typecheck clean · emergency recall = 100% |
@@ -80,8 +80,8 @@ transparent urgency decision + clinician handoff report.
 
 | Variable(s) | Purpose | Default |
 |-------------|---------|---------|
-| `LLM_BASE_URL` · `LLM_API_KEY` · `LLM_MODEL` | LLM via **OpenAI-compatible** format | OpenRouter + Qwen3.6 |
-| `LLM_MAX_TOKENS` | Output cap — keep high so reasoning output isn't truncated | `16384` |
+| `LLM_BASE_URL` · `LLM_API_KEY` · `LLM_MODEL` | LLM via **OpenAI-compatible** format | Google Gemini (`gemini-2.5-flash`) |
+| `LLM_MAX_TOKENS` | Output cap — keep high so reasoning output isn't truncated | `8192` |
 | `EMBED_PROVIDER` · `EMBED_BASE_URL` · `EMBED_MODEL` · `EMBED_DIMS` · `HF_TOKEN` | **Free HuggingFace** embeddings (OpenAI-compatible semantics) | `bge-base-en-v1.5` / 768 |
 | `SARVAM_API_KEY` · `SARVAM_*` | Sarvam AI voice (STT `saarika`, TTS `bulbul`) | — |
 | `QDRANT_URL` · `QDRANT_API_KEY` · `QDRANT_*_COLLECTION` | Qdrant vector DB | localhost:6333 |
@@ -151,6 +151,26 @@ Set two **repo** secrets (Settings → Secrets and variables → Actions):
 | `GET /api/monitor` | `Authorization: Bearer $CRON_SECRET` | GitHub Action — advances due follow-ups |
 | `GET /api/monitor?secret=$CRON_SECRET` | query param | Manual / local |
 | `POST /api/monitor` | — | Patient follow-up reply → re-assess → **escalate** if more urgent |
+
+---
+
+## ⭐ Simulation engine (bonus)
+
+Generate N synthetic patients with ground-truth tiers, batch-triage them, and render a confusion
+matrix + the headline **emergency recall**. Two modes ([app/simulation/](app/simulation/) ·
+[lib/simulation/](lib/simulation/)):
+
+| Mode | What runs | Cost | Use |
+|------|-----------|------|-----|
+| **Guardrails only** | Deterministic rule engine only — no LLM | Instant, free, up to 5 000 patients | Prove **emergency recall = 100%** |
+| **Full pipeline** | The whole `assess()` (RAG + 5-agent debate + guardrails) per patient | ~30s + ~5 LLM calls **per patient** | Validate the real AI tiering |
+
+**Vercel-safe full mode.** A full assessment can't finish N patients inside Vercel's 60s function
+limit, so full mode is processed **one batch per request**: the browser calls `/api/simulate`
+repeatedly (advancing `offset`), each call runs a single ~30s assessment well under the limit, and the
+client stitches the batches together — the confusion matrix fills in **live** as cases complete.
+Patient generation is index-deterministic, so a batched run is identical to one big run. For large N
+without the per-request limit, run the CLI instead: `npm run simulate -- --n 200 --mode full`.
 
 ---
 

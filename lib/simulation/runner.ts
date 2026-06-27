@@ -24,6 +24,71 @@ export interface SimRunResult {
   metrics: SimMetrics;
 }
 
+/** Did this error come from the LLM provider rate-limiting / quota (HTTP 429)? */
+function isRateLimitError(err: unknown): boolean {
+  const e = err as { status?: number; lc_error_code?: string; message?: string } | undefined;
+  if (!e) return false;
+  if (e.status === 429) return true;
+  if (e.lc_error_code === "MODEL_RATE_LIMIT") return true;
+  return /\b429\b|rate.?limit|quota|resource_exhausted/i.test(String(e.message ?? ""));
+}
+
+export interface FullSliceResult {
+  results: CaseResult[];
+  /** True if the LLM provider returned 429 (daily/RPM quota) — stop the run. */
+  quotaExceeded: boolean;
+  /** True if we hit the wall-clock deadline before finishing the slice. */
+  timedOut: boolean;
+}
+
+/**
+ * Run the full pipeline on a PRE-GENERATED slice of patients, bounded by a
+ * wall-clock deadline so a single serverless invocation always returns within
+ * the platform limit (Vercel Hobby = 60s). The /api/simulate route calls this
+ * once per client batch; the client stitches the batches together.
+ *
+ * Stops early — returning what it has — on either a rate-limit (429) or the
+ * deadline, so the caller can surface a clear message instead of a silent
+ * timeout.
+ */
+export async function runFullSlice(
+  patients: SyntheticPatient[],
+  concurrency = 1,
+  deadlineMs = 45_000
+): Promise<FullSliceResult> {
+  const results: CaseResult[] = [];
+  let quotaExceeded = false;
+  let timedOut = false;
+  const start = Date.now();
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < patients.length && !quotaExceeded && !timedOut) {
+      if (Date.now() - start > deadlineMs) {
+        timedOut = true;
+        break;
+      }
+      const p = patients[cursor++];
+      try {
+        const a = await assess(p.profile);
+        results.push(toResult(p, a.tier, a.guardrailOverride, a.explainability.confidence));
+      } catch (err) {
+        if (isRateLimitError(err)) {
+          quotaExceeded = true;
+          break;
+        }
+        // Non-quota failure: conservative guardrail fallback so the run continues.
+        const gr = runGuardrails(p.profile);
+        results.push(toResult(p, gr.forcedTier ?? "SELF_CARE", !!gr.forcedTier, 0));
+        console.warn(`[sim] case ${p.id} failed, used guardrail fallback:`, err);
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, patients.length) }, () => worker()));
+  return { results, quotaExceeded, timedOut };
+}
+
 function toResult(p: SyntheticPatient, predicted: UrgencyTier, guardrailOverride: boolean, confidence: number): CaseResult {
   const correct = predicted === p.expectedTier;
   const undertriage = urgencyRank(predicted) > urgencyRank(p.expectedTier); // less urgent than truth

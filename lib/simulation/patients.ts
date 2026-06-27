@@ -303,18 +303,41 @@ export function archetypeList(): { name: string; expectedTier: UrgencyTier }[] {
   return ARCHETYPES.map((a) => ({ name: a.name, expectedTier: a.expectedTier }));
 }
 
+/** Build the single patient at global index `i` (deterministic for a seed). */
+function patientAt(i: number, seed: number): SyntheticPatient {
+  const archetype = ARCHETYPES[i % ARCHETYPES.length];
+  const rng = new Rng(seed + i * 2654435761);
+  return {
+    id: `sim-${i + 1}`,
+    expectedTier: archetype.expectedTier,
+    archetype: archetype.name,
+    profile: archetype.build(rng),
+  };
+}
+
 /** Generate N synthetic patients, cycling archetypes with varied seeds. */
 export function generatePatients(n: number, seed = 42): SyntheticPatient[] {
   const out: SyntheticPatient[] = [];
-  for (let i = 0; i < n; i++) {
-    const archetype = ARCHETYPES[i % ARCHETYPES.length];
-    const rng = new Rng(seed + i * 2654435761);
-    out.push({
-      id: `sim-${i + 1}`,
-      expectedTier: archetype.expectedTier,
-      archetype: archetype.name,
-      profile: archetype.build(rng),
-    });
-  }
+  for (let i = 0; i < n; i++) out.push(patientAt(i, seed));
+  return out;
+}
+
+/**
+ * Generate the patients for global indices [offset, offset+limit), clamped to
+ * `total`. Because every patient is derived purely from its global index, a
+ * slice is bit-for-bit identical to the same indices of a full `generatePatients`
+ * run — which is what lets the simulation be processed batch-by-batch across
+ * multiple short serverless requests (Vercel's 60s function limit) without
+ * changing the result.
+ */
+export function generatePatientSlice(
+  total: number,
+  offset: number,
+  limit: number,
+  seed = 42
+): SyntheticPatient[] {
+  const out: SyntheticPatient[] = [];
+  const end = Math.min(offset + limit, total);
+  for (let i = Math.max(0, offset); i < end; i++) out.push(patientAt(i, seed));
   return out;
 }

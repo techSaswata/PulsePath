@@ -24,13 +24,13 @@ export const llmEnv = () => ({
   apiKey: required("LLM_API_KEY", process.env.LLM_API_KEY),
   model: required("LLM_MODEL", process.env.LLM_MODEL),
   temperature: Number(optional(process.env.LLM_TEMPERATURE, "0.2")),
-  // Cap output tokens. Must be generous: reasoning models (e.g. Qwen3.x) emit
-  // hidden reasoning tokens BEFORE the structured-output JSON, so too low a cap
-  // truncates the JSON mid-structure and the parse fails ("length limit
-  // reached"). 16k leaves ample headroom for reasoning + the largest agent
+  // Cap output tokens. Must be generous: reasoning models (e.g. Gemini 2.5
+  // Flash) emit hidden "thinking" tokens BEFORE the structured-output JSON, so
+  // too low a cap truncates the JSON mid-structure and the parse fails ("length
+  // limit reached"). 8k+ leaves headroom for reasoning + the largest agent
   // payload, while staying well below the 64k default that can trip metered
-  // credit limits (e.g. OpenRouter).
-  maxTokens: Number(optional(process.env.LLM_MAX_TOKENS, "16384")),
+  // credit limits.
+  maxTokens: Number(optional(process.env.LLM_MAX_TOKENS, "8192")),
 });
 
 /** Embeddings (HF serverless router by default, or any OpenAI-compatible /v1/embeddings). */
